@@ -11,7 +11,7 @@ class RavenComponent {
     }
 
     function docs($entity) {
-        throw new Exception("Not Implemented");
+        return new RavenDocumentLoadOperation($this->server, $entity);
     }
 }
 
@@ -25,12 +25,42 @@ abstract class RavenOperation {
         curl_setopt_array($handle, $this->get_curl_options());
         curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
         $result = curl_exec($handle);
-        $result =  substr($result, 3); // not sure what these 3 garbage characters are. figure it out later
-        $result = str_replace('":NaN', '":null', $result); // is newtonsoft.json doing this or raven? figure it out later
+        $result = $this->transform_result($result);
         return $result;
     }
     
     abstract protected function get_curl_options();
+
+    protected function transform_result($result) {
+        return $result;
+    }
+}
+
+class RavenDocumentOperation extends RavenOperation {
+    private $url;
+    private $id;
+    private $etag;
+
+    function  __construct($server, $entity) {
+        $this->url = $server . '/docs/' . $entity;
+    }
+
+    function load($id, $etag = null) {
+        $this->id = $id;
+        $this->etag = $etag;
+        return $this;
+    }
+
+    function get_curl_options() {
+        $headers = array();
+        if (isset($this->etag)) {
+            $headers['If-None-Match: ' . $this->etag];
+        }
+        return array(
+                CURLOPT_URL => $this->url . '/' . $this->id,
+                CURLOPT_HEADER => $headers
+            );
+    }
 }
 
 class RavenQueryOperation extends RavenOperation {
@@ -65,6 +95,12 @@ class RavenQueryOperation extends RavenOperation {
                     . '?'
                     . http_build_query($this->query)
             );
+    }
+
+    function  transform_result($result) {
+        $result = substr($result, 3); // not sure what these 3 garbage characters are. figure it out later
+        $result = str_replace('":NaN', '":null', $result); // is newtonsoft.json doing this or raven? figure it out later
+        return $result;
     }
 }
 ?>
